@@ -772,7 +772,6 @@ function apiDelete(col,id){
 }
 function addDoc(col,data,silent){
   var label=COL_LABEL[col]||'Registro';
-  if(!SYNC_OK){ arrFor(col).push(Object.assign({id:uid()},data)); saveCache(); render(); if(!silent) toast(label+' salva neste dispositivo.'); return; }
   apiCreate(col,data).then(function(row){
     arrFor(col).push(row); saveCache(); render();
     if(!silent) toast(label+' salva.');
@@ -783,8 +782,7 @@ function addDoc(col,data,silent){
 }
 function delDoc(col,id){
   var label=COL_LABEL[col]||'Registro';
-  var arr=arrFor(col); var i=arr.findIndex(function(x){return x.id===id});
-  if(!SYNC_OK){ if(i>-1)arr.splice(i,1); saveCache(); render(); return; }
+  var arr=arrFor(col);
   apiDelete(col,id).then(function(){
     var j=arr.findIndex(function(x){return x.id===id}); if(j>-1)arr.splice(j,1);
     saveCache(); render();
