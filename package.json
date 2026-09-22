@@ -1,0 +1,9 @@
+{
+  "name": "hyper-rh-performance",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@netlify/database": "^1.0.0",
+    "@netlify/functions": "^2.8.0"
+  }
+}
