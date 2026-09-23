@@ -1058,6 +1058,15 @@ function updateHeroStats(){
 }
 
 function render(){
+  /* preserva o campo em edição: uma sincronização em segundo plano (boot ou o
+     polling de 20s) não pode apagar o que o usuário está digitando num formulário */
+  var view=document.getElementById('view');
+  var active=document.activeElement;
+  var restore=null;
+  if(view && active && view.contains(active) && active.id && (active.tagName==='INPUT'||active.tagName==='TEXTAREA'||active.tagName==='SELECT')){
+    restore={id:active.id,value:active.value,checked:active.checked,selStart:(typeof active.selectionStart==='number'?active.selectionStart:null),selEnd:(typeof active.selectionEnd==='number'?active.selectionEnd:null)};
+  }
+
   buildTabsOnce(); updateTabsUI(); updateHeroStats();
   if(tab==='funcoes')viewFuncoes();
   else if(tab==='criterios')viewCriterios();
@@ -1065,6 +1074,16 @@ function render(){
   else if(tab==='aval')viewAval();
   else if(tab==='estrategico')viewEstrategico();
   else viewPainel();
+
+  if(restore){
+    var el=document.getElementById(restore.id);
+    if(el){
+      if(el.type==='checkbox'||el.type==='radio'){el.checked=restore.checked;}
+      else{el.value=restore.value;}
+      el.focus();
+      if(restore.selStart!=null && el.setSelectionRange){try{el.setSelectionRange(restore.selStart,restore.selEnd);}catch(e){}}
+    }
+  }
 }
 
 /* ---------- CACHE LOCAL (resiliência) ---------- */
