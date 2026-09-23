@@ -6,34 +6,24 @@ export default async (req: Request) => {
   try {
     if (req.method === "GET") {
       const rows = await db.sql`
-        SELECT id, name, area, notes, critical, created_at AS "createdAt"
-        FROM roles ORDER BY created_at ASC
+        SELECT id, employee_id AS "employeeId", period, note, created_at AS "createdAt"
+        FROM highlights ORDER BY created_at DESC
       `;
       return Response.json(rows);
     }
     if (req.method === "POST") {
       const body = await req.json();
       const [row] = await db.sql`
-        INSERT INTO roles (name, area, notes, critical)
-        VALUES (${body.name || ""}, ${body.area || ""}, ${body.notes || ""}, ${!!body.critical})
-        RETURNING id, name, area, notes, critical, created_at AS "createdAt"
-      `;
-      return Response.json(row);
-    }
-    if (req.method === "PATCH") {
-      const body = await req.json();
-      if (!body.id) return new Response("missing id", { status: 400 });
-      const [row] = await db.sql`
-        UPDATE roles SET critical = ${!!body.critical}
-        WHERE id = ${body.id}
-        RETURNING id, name, area, notes, critical, created_at AS "createdAt"
+        INSERT INTO highlights (employee_id, period, note)
+        VALUES (${body.employeeId}, ${body.period || ""}, ${body.note || ""})
+        RETURNING id, employee_id AS "employeeId", period, note, created_at AS "createdAt"
       `;
       return Response.json(row);
     }
     if (req.method === "DELETE") {
       const id = new URL(req.url).searchParams.get("id");
       if (!id) return new Response("missing id", { status: 400 });
-      await db.sql`DELETE FROM roles WHERE id = ${id}`;
+      await db.sql`DELETE FROM highlights WHERE id = ${id}`;
       return Response.json({ ok: true });
     }
     return new Response("method not allowed", { status: 405 });
@@ -43,5 +33,5 @@ export default async (req: Request) => {
 };
 
 export const config: Config = {
-  path: "/api/roles",
+  path: "/api/highlights",
 };
