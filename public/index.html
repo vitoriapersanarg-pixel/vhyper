@@ -57,6 +57,7 @@ h2{font-family:var(--disp);font-weight:600;font-size:18px;margin:0;letter-spacin
 .card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08),0 14px 32px rgba(0,0,0,.07)}
 #view{animation:viewIn .45s cubic-bezier(.2,.8,.2,1) both}
 #view>*{animation:viewIn .45s cubic-bezier(.2,.8,.2,1) both}
+#view.no-anim>*{animation:none}
 #view>*:nth-child(1){animation-delay:0s}
 #view>*:nth-child(2){animation-delay:.05s}
 #view>*:nth-child(3){animation-delay:.1s}
@@ -1074,22 +1075,84 @@ function updateHeroStats(){
   if(avg!==lastHeroVals.avg){document.getElementById('hs_avg').textContent=avg==null?'—':nf1(avg)+'%';lastHeroVals.avg=avg;}
 }
 
+var __viewAnimTab=null;
 function render(){
+  var __fs=captureFormState();
   buildTabsOnce(); updateTabsUI(); updateHeroStats();
+  var __v=document.getElementById('view');
+  if(__v){ if(__viewAnimTab===tab) __v.classList.add('no-anim'); else __v.classList.remove('no-anim'); }
+  __viewAnimTab=tab;
   if(tab==='funcoes')viewFuncoes();
   else if(tab==='criterios')viewCriterios();
   else if(tab==='colab')viewColab();
   else if(tab==='aval')viewAval();
   else if(tab==='estrategico')viewEstrategico();
   else viewPainel();
+  restoreFormState(__fs);
+}
+
+/* PROTEÇÃO GERAL CONTRA PERDA DE DADOS AO DIGITAR: qualquer render() recria
+   do zero o HTML de dentro de #view, então qualquer campo (input/select/
+   textarea) editável perderia o que está sendo digitado nele - não importa
+   o que disparou esse render() (sync em segundo plano, salvar outro campo
+   da mesma tela, excluir um item, aplicar um template, trocar o tema...).
+   Por isso, ANTES de redesenhar, guardamos o valor atual de cada campo (e
+   qual deles está com foco + posição do cursor) e, DEPOIS de redesenhar,
+   devolvemos esses valores e o foco para os campos correspondentes. */
+function formFieldKey(el){
+  if(el.id) return 'id:'+el.id;
+  if(el.dataset){
+    var ks=[]; for(var k in el.dataset){ if(Object.prototype.hasOwnProperty.call(el.dataset,k)) ks.push(k); }
+    if(ks.length){
+      ks.sort();
+      var parts=[]; for(var i=0;i<ks.length;i++) parts.push(ks[i]+'='+el.dataset[ks[i]]);
+      return 'd:'+el.tagName+':'+parts.join('&');
+    }
+  }
+  return null;
+}
+function captureFormState(){
+  var v=document.getElementById('view'); if(!v) return null;
+  var active=document.activeElement;
+  var out={fields:{},activeKey:null,selStart:null,selEnd:null};
+  var els=v.querySelectorAll('input,textarea,select');
+  for(var i=0;i<els.length;i++){
+    var el=els[i], key=formFieldKey(el); if(!key) continue;
+    if(el.type==='checkbox'||el.type==='radio') out.fields[key]={c:el.checked};
+    else out.fields[key]={v:el.value};
+    if(el===active){
+      out.activeKey=key;
+      if(typeof el.selectionStart==='number'){ out.selStart=el.selectionStart; out.selEnd=el.selectionEnd; }
+    }
+  }
+  return out;
+}
+function restoreFormState(fs){
+  if(!fs) return;
+  var v=document.getElementById('view'); if(!v) return;
+  var els=v.querySelectorAll('input,textarea,select'), toFocus=null;
+  for(var i=0;i<els.length;i++){
+    var el=els[i], key=formFieldKey(el); if(!key) continue;
+    var st=fs.fields[key]; if(!st) continue;
+    if(el.type==='checkbox'||el.type==='radio') el.checked=st.c;
+    else el.value=st.v;
+    if(key===fs.activeKey) toFocus=el;
+  }
+  if(toFocus){
+    toFocus.focus();
+    if(fs.selStart!=null && typeof toFocus.setSelectionRange==='function'){
+      try{ toFocus.setSelectionRange(fs.selStart,fs.selEnd); }catch(e){}
+    }
+  }
 }
 
 /* o usuário pode estar digitando em qualquer campo dentro de #view (nome de
    função, critério, comentário de avaliação, etc.) no exato momento em que a
    sincronização em segundo plano (boot ou o polling de 20s) tenta atualizar a
-   tela. Nesse caso NÃO redesenhamos a tela agora - isso apagaria/piscaria o
-   que está sendo digitado. Os dados novos ficam guardados e a tela é
-   atualizada assim que o campo perder o foco. */
+   tela. Nesse caso evitamos redesenhar agora (mesmo com a proteção acima,
+   isso evita reiniciar a animação de entrada/piscar a tela sem necessidade
+   enquanto a pessoa está digitando). Os dados novos ficam guardados e a tela
+   é atualizada assim que o campo perder o foco. */
 var pendingBackgroundRender=false;
 function isEditingInView(){
   var v=document.getElementById('view');
