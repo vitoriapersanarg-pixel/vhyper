@@ -2,6 +2,7 @@
 <title>Performance Hyper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#070D18; --bg2:#0A1424; --panel:#101E37; --panel2:#0D1830; --panel3:#0B1730; --line:#233151; --line2:#2B3B5E;
@@ -179,6 +180,18 @@ footer{border-top:1px solid var(--line);padding:16px 32px 32px;max-width:920px;m
   footer{flex-direction:column;align-items:flex-start;gap:4px}
 }
 @media (max-width:400px){.kpis{grid-template-columns:1fr}}
+#printArea{display:none}
+@media print{
+  body *{visibility:hidden}
+  #printArea,#printArea *{visibility:visible}
+  #printArea{display:block;position:absolute;left:0;top:0;width:100%;padding:24px;color:#111;background:#fff}
+  #printArea h1{font:700 20px/1.3 var(--disp);margin:0 0 4px}
+  #printArea h2{font:700 14px/1.3 var(--disp);margin:20px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
+  #printArea p{font:400 12px/1.4 var(--body);color:#333;margin:0 0 4px}
+  #printArea table{width:100%;border-collapse:collapse;margin-bottom:6px}
+  #printArea td,#printArea th{border:1px solid #ccc;padding:4px 8px;font-size:11px;text-align:left}
+  #printArea th{background:#f2f2f2}
+}
 </style>
 
 <div class="app-shell">
@@ -205,6 +218,7 @@ footer{border-top:1px solid var(--line);padding:16px 32px 32px;max-width:920px;m
   </div>
 </div>
 <div id="toasts"></div>
+<div id="printArea"></div>
 
 <script>
 var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>';
@@ -834,7 +848,7 @@ function viewPainel(){
 }
 
 /* ---------- ESTRATÉGICO (visões agregadas) ---------- */
-var ESTRAT_TABS=[['9box','Matriz 9-Box'],['org','Organograma'],['clima','Clima & Cultura'],['highlights','Hyper Performance'],['succession','Pipeline de Sucessão']];
+var ESTRAT_TABS=[['9box','Matriz 9-Box'],['org','Organograma'],['clima','Clima & Cultura'],['highlights','Hyper Performance'],['succession','Pipeline de Sucessão'],['relatorios','Relatórios Gerenciais']];
 function empAvgScore(id){
   var xs=EVALS.filter(function(v){return v.employeeId===id}).map(evalFinalScore).filter(function(v){return v!=null});
   return xs.length?xs.reduce(function(a,b){return a+b},0)/xs.length:null;
@@ -979,6 +993,7 @@ function viewEstrategico(){
   else if(estratTab==='clima') html+=viewClima();
   else if(estratTab==='highlights') html+=viewHighlights();
   else if(estratTab==='succession') html+=viewSuccession();
+  else if(estratTab==='relatorios') html+=viewRelatorios();
   else html+=view9Box();
 
   document.getElementById('view').innerHTML=html;
@@ -1009,7 +1024,140 @@ function viewEstrategico(){
         readiness:document.getElementById('sc_ready').value,notes:document.getElementById('sc_notes').value.trim()});
       document.getElementById('sc_notes').value='';
     });
+  }else if(estratTab==='relatorios'){
+    var repXlsx=document.getElementById('rep_xlsx');
+    if(repXlsx) repXlsx.addEventListener('click',exportExecXlsx);
+    var repPdf=document.getElementById('rep_pdf');
+    if(repPdf) repPdf.addEventListener('click',exportExecPdf);
+    var repRoles=document.getElementById('rep_roles');
+    if(repRoles) repRoles.addEventListener('click',exportRolesCsv);
+    var repCrit=document.getElementById('rep_crit');
+    if(repCrit) repCrit.addEventListener('click',exportCriteriaCsv);
+    var repEmp=document.getElementById('rep_emp');
+    if(repEmp) repEmp.addEventListener('click',exportEmployeesCsv);
+    var repAval=document.getElementById('rep_aval');
+    if(repAval) repAval.addEventListener('click',function(){exportCsv(EVALS.map(function(ev){return {ev:ev,score:evalFinalScore(ev)}}))});
   }
+}
+
+/* ---------- RELATÓRIOS GERENCIAIS ---------- */
+function reportKpis(){
+  var activeEmps=EMPLOYEES.filter(function(e){return e.status!=='inativo'});
+  var payroll=activeEmps.reduce(function(s,e){return s+(Number(e.salary)||0)},0);
+  var scored=EVALS.map(evalFinalScore).filter(function(v){return v!=null});
+  var avgGeral=scored.length?scored.reduce(function(a,b){return a+b},0)/scored.length:null;
+  var climaAvg=CLIMATE.length?CLIMATE.reduce(function(s,c){return s+(Number(c.score)||0)},0)/CLIMATE.length:null;
+  var byArea={};
+  activeEmps.forEach(function(e){
+    var r=ROLES.filter(function(rr){return rr.id===e.roleId})[0];
+    var area=(r&&r.area)||'Sem área';
+    byArea[area]=byArea[area]||{headcount:0,custo:0};
+    byArea[area].headcount++; byArea[area].custo+=Number(e.salary)||0;
+  });
+  return {activeEmps:activeEmps,payroll:payroll,avgGeral:avgGeral,climaAvg:climaAvg,byArea:byArea};
+}
+function viewRelatorios(){
+  var k=reportKpis();
+  var html='<div class="card"><div class="head"><h2>Relatórios Gerenciais</h2><span class="tag">exportação estruturada para diretoria e RH</span></div>'+
+    '<div class="kpis">'+
+    '<div class="kpi"><div class="lbl">Headcount ativo</div><div class="val">'+k.activeEmps.length+'</div></div>'+
+    '<div class="kpi"><div class="lbl">Folha/mês</div><div class="val" style="font-size:20px">'+moneyFmt(k.payroll)+'</div></div>'+
+    '<div class="kpi"><div class="lbl">Média de avaliação</div><div class="val">'+(k.avgGeral!=null?nf1(k.avgGeral)+'%':'—')+'</div></div>'+
+    '<div class="kpi"><div class="lbl">Clima médio</div><div class="val">'+(k.climaAvg!=null?nf1(k.climaAvg)+'%':'—')+'</div></div>'+
+    '</div>'+
+    '<p class="meta" style="margin-top:14px">Os relatórios reúnem, sempre atualizados direto do banco: Funções, Colaboradores, Critérios, Avaliações, Sucessão e Clima.</p>'+
+    '<div class="row-actions" style="margin-top:10px">'+
+      '<button class="btn primary" id="rep_xlsx">Exportar Excel (.xlsx) — relatório completo</button>'+
+      '<button class="btn ghost" id="rep_pdf">Exportar PDF executivo</button>'+
+    '</div></div>'+
+    '<div class="card" style="margin-top:16px"><div class="head"><h2>Exportações individuais (CSV)</h2><span class="tag">uma tabela por vez, pra planilhas específicas</span></div>'+
+    '<div class="row-actions">'+
+      '<button class="btn ghost" id="rep_roles">Funções</button>'+
+      '<button class="btn ghost" id="rep_crit">Critérios</button>'+
+      '<button class="btn ghost" id="rep_emp">Colaboradores</button>'+
+      '<button class="btn ghost" id="rep_aval">Avaliações</button>'+
+    '</div></div>';
+  return html;
+}
+function exportExecXlsx(){
+  if(typeof XLSX==='undefined'){toast('Biblioteca de exportação ainda carregando — tente de novo em instantes.');return;}
+  var k=reportKpis();
+  var wb=XLSX.utils.book_new();
+
+  var resumo=[['Relatório Gerencial — Hyper'],['Gerado em',new Date().toLocaleString('pt-BR')],[],
+    ['Indicador','Valor'],
+    ['Headcount ativo',k.activeEmps.length],
+    ['Folha salarial/mês',k.payroll],
+    ['Média geral de avaliação (%)',k.avgGeral!=null?Math.round(k.avgGeral*10)/10:''],
+    ['Clima médio (%)',k.climaAvg!=null?Math.round(k.climaAvg*10)/10:''],
+    ['Funções cadastradas',ROLES.length],
+    [],['Área','Headcount','Custo/mês']];
+  Object.keys(k.byArea).sort().forEach(function(a){resumo.push([a,k.byArea[a].headcount,k.byArea[a].custo]);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumo),'Resumo');
+
+  var empRows=[['Nome','Função','Área','Situação','Salário','Líder','DISC primário','DISC secundário','Potencial','PDI','Treinamento','Onboarding 30d','Onboarding 60d','Onboarding 90d','Destaque']];
+  EMPLOYEES.forEach(function(e){
+    var r=ROLES.filter(function(rr){return rr.id===e.roleId})[0];
+    empRows.push([e.name,r?r.name:'',r?r.area:'',e.status||'ativo',e.salary||'',empName(e.leaderId),e.discPrimary||'',e.discSecondary||'',e.potentialScore||'',e.pdiStatus||'',e.trainingStatus||'',e.onboarding30?'Sim':'Não',e.onboarding60?'Sim':'Não',e.onboarding90?'Sim':'Não',e.highlight?'Sim':'Não']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(empRows),'Colaboradores');
+
+  var roleRows=[['Função','Área','Crítica','Colaboradores','Critérios','Observações']];
+  ROLES.forEach(function(r){
+    var ne=EMPLOYEES.filter(function(e){return e.roleId===r.id}).length;
+    var nc=critsForRole(r.id).length;
+    roleRows.push([r.name,r.area||'',r.critical?'Sim':'Não',ne,nc,r.notes||'']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(roleRows),'Funções');
+
+  var critRows=[['Função','Critério','Categoria','Tipo','Peso','Como avaliar']];
+  CRITERIA.forEach(function(c){
+    var typeLbl=c.type==='bool'?'Sim/Não':c.type==='texto'?'Texto + nota':'Nota 1-5';
+    critRows.push([roleName(c.roleId),c.name,c.category||'Geral',typeLbl,c.weight||0,c.desc||'']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(critRows),'Critérios');
+
+  var avalRows=[['Colaborador','Função','Período','Nota final (%)','Avaliador']];
+  EVALS.forEach(function(ev){
+    var sc=evalFinalScore(ev);
+    avalRows.push([empName(ev.employeeId),roleName(ev.roleId),ev.period,sc!=null?Math.round(sc*10)/10:'',ev.evaluator||'']);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(avalRows),'Avaliações');
+
+  var sucRows=[['Função','Candidato','Prontidão','Observações']];
+  SUCCESSION.forEach(function(s){sucRows.push([roleName(s.roleId),empName(s.candidateId),s.readiness||'',s.notes||'']);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sucRows),'Sucessão');
+
+  var climRows=[['Dimensão','Nota','Período']];
+  CLIMATE.forEach(function(c){climRows.push([c.dimension,c.score,c.period||'']);});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(climRows),'Clima');
+
+  var dt=new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb,'relatorio_gerencial_hyper_'+dt+'.xlsx');
+}
+function buildPrintReportHtml(){
+  var k=reportKpis();
+  var html='<h1>Relatório Executivo — Hyper</h1><p>Gerado em '+esc(new Date().toLocaleString('pt-BR'))+'</p>';
+  html+='<h2>Indicadores gerais</h2><table><tbody>'+
+    '<tr><th>Headcount ativo</th><td>'+k.activeEmps.length+'</td></tr>'+
+    '<tr><th>Folha salarial/mês</th><td>'+esc(moneyFmt(k.payroll))+'</td></tr>'+
+    '<tr><th>Média geral de avaliação</th><td>'+(k.avgGeral!=null?nf1(k.avgGeral)+'%':'—')+'</td></tr>'+
+    '<tr><th>Clima médio</th><td>'+(k.climaAvg!=null?nf1(k.climaAvg)+'%':'—')+'</td></tr>'+
+    '<tr><th>Funções cadastradas</th><td>'+ROLES.length+'</td></tr>'+
+    '</tbody></table>';
+  html+='<h2>Headcount e custo por área</h2><table><thead><tr><th>Área</th><th>Headcount</th><th>Custo/mês</th></tr></thead><tbody>'+
+    Object.keys(k.byArea).sort().map(function(a){return '<tr><td>'+esc(a)+'</td><td>'+k.byArea[a].headcount+'</td><td>'+esc(moneyFmt(k.byArea[a].custo))+'</td></tr>';}).join('')+
+    '</tbody></table>';
+  html+='<h2>Colaboradores</h2><table><thead><tr><th>Nome</th><th>Função</th><th>Área</th><th>Situação</th><th>Salário</th></tr></thead><tbody>'+
+    EMPLOYEES.map(function(e){var r=ROLES.filter(function(rr){return rr.id===e.roleId})[0];
+      return '<tr><td>'+esc(e.name)+'</td><td>'+esc(r?r.name:'')+'</td><td>'+esc(r?r.area:'')+'</td><td>'+esc(e.status||'ativo')+'</td><td>'+esc(moneyFmt(e.salary))+'</td></tr>';}).join('')+
+    '</tbody></table>';
+  return html;
+}
+function exportExecPdf(){
+  var area=document.getElementById('printArea');
+  area.innerHTML=buildPrintReportHtml();
+  setTimeout(function(){window.print();},50);
 }
 
 function toCsv(headers,rows){
