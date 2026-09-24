@@ -4,6 +4,10 @@ import type { Config } from "@netlify/functions";
 export default async (req: Request) => {
   const db = getDatabase();
   try {
+    // Migração aditiva e idempotente: nunca remove colunas nem dados existentes.
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_date date`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_type text`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_reason text`;
     if (req.method === "GET") {
       const rows = await db.sql`
         SELECT
@@ -13,7 +17,10 @@ export default async (req: Request) => {
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
-          highlight, created_at AS "createdAt"
+          highlight,
+          termination_date AS "terminationDate", termination_type AS "terminationType",
+          termination_reason AS "terminationReason",
+          created_at AS "createdAt"
         FROM employees ORDER BY created_at ASC
       `;
       return Response.json(rows);
@@ -40,7 +47,10 @@ export default async (req: Request) => {
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
-          highlight, created_at AS "createdAt"
+          highlight,
+          termination_date AS "terminationDate", termination_type AS "terminationType",
+          termination_reason AS "terminationReason",
+          created_at AS "createdAt"
       `;
       return Response.json(row);
     }
@@ -65,6 +75,9 @@ export default async (req: Request) => {
       const onboarding60 = has("onboarding60") ? !!body.onboarding60 : current.onboarding_60;
       const onboarding90 = has("onboarding90") ? !!body.onboarding90 : current.onboarding_90;
       const highlight = has("highlight") ? !!body.highlight : current.highlight;
+      const terminationDate = has("terminationDate") ? body.terminationDate : current.termination_date;
+      const terminationType = has("terminationType") ? body.terminationType : current.termination_type;
+      const terminationReason = has("terminationReason") ? body.terminationReason : current.termination_reason;
       const [row] = await db.sql`
         UPDATE employees SET
           name = ${name}, role_id = ${roleId}, status = ${status},
@@ -73,7 +86,9 @@ export default async (req: Request) => {
           potential_score = ${potentialScore ?? null}, pdi_status = ${pdiStatus || "nao_iniciado"},
           training_status = ${trainingStatus || "nao_iniciado"},
           onboarding_30 = ${onboarding30}, onboarding_60 = ${onboarding60}, onboarding_90 = ${onboarding90},
-          highlight = ${highlight}
+          highlight = ${highlight},
+          termination_date = ${terminationDate || null}, termination_type = ${terminationType || null},
+          termination_reason = ${terminationReason || null}
         WHERE id = ${body.id}
         RETURNING
           id, role_id AS "roleId", name, status,
@@ -82,16 +97,15 @@ export default async (req: Request) => {
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
-          highlight, created_at AS "createdAt"
+          highlight,
+          termination_date AS "terminationDate", termination_type AS "terminationType",
+          termination_reason AS "terminationReason",
+          created_at AS "createdAt"
       `;
       return Response.json(row);
     }
-    if (req.method === "DELETE") {
-      const id = new URL(req.url).searchParams.get("id");
-      if (!id) return new Response("missing id", { status: 400 });
-      await db.sql`DELETE FROM employees WHERE id = ${id}`;
-      return Response.json({ ok: true });
-    }
+    // Governança Fase 1: colaboradores nunca são excluídos, apenas desligados (status="inativo" + dados do desligamento).
+    // O método DELETE foi desativado propositalmente para preservar o histórico.
     return new Response("method not allowed", { status: 405 });
   } catch (err: any) {
     return new Response(String(err && err.message ? err.message : err), { status: 500 });
