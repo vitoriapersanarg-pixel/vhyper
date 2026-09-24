@@ -269,6 +269,53 @@ function nf1(x){return (Math.round(x*10)/10).toLocaleString('pt-BR',{minimumFrac
 function roleName(id){var r=ROLES.filter(function(r){return r.id===id})[0];return r?r.name:'—'}
 function critsForRole(id){return CRITERIA.filter(function(c){return c.roleId===id})}
 
+/* ---------- FASE 1: listas fixas, obrigatoriedade e governança ---------- */
+function distinctVals(arr,getter){
+  var seen={},out=[];
+  arr.forEach(function(x){var v=getter(x);if(v&&!seen[v]){seen[v]=1;out.push(v);}});
+  return out.sort(function(a,b){return a.localeCompare(b,'pt-BR')});
+}
+function unionSeed(seed,vals){return Array.from(new Set(seed.concat(vals))).sort(function(a,b){return a.localeCompare(b,'pt-BR')});}
+var AREA_SEED=['Financeiro','Produto','Tecnologia','Comercial','Jurídico','Operações'];
+var CAT_SEED=['Resultados','Comportamental','Técnico','Liderança','Qualidade','Processos'];
+var DIM_SEED=['Liderança','Reconhecimento','Comunicação','Ambiente de trabalho','Desenvolvimento','Confiança na gestão','Equilíbrio vida-trabalho'];
+var PERIOD_SEED=['2026-T1','2026-T2','2026-T3','2026-T4'];
+function allAreas(){return unionSeed(AREA_SEED,distinctVals(ROLES,function(r){return r.area}));}
+function allCategories(){return unionSeed(CAT_SEED,distinctVals(CRITERIA,function(c){return c.category}));}
+function allDimensions(){return unionSeed(DIM_SEED,distinctVals(CLIMATE,function(c){return c.dimension}));}
+function allPeriods(){
+  var vals=distinctVals(EVALS,function(e){return e.period}).concat(distinctVals(CLIMATE,function(c){return c.period})).concat(distinctVals(HIGHLIGHTS,function(h){return h.period}));
+  return unionSeed(PERIOD_SEED,vals);
+}
+function allEvaluators(){return distinctVals(EVALS,function(e){return e.evaluator});}
+function isCeoRole(roleId){var r=ROLES.filter(function(r){return r.id===roleId})[0];return !!(r&&/\bceo\b/i.test(r.name||''));}
+function isFinalEval(ev){return ev.status!=='rascunho';}
+function finalEvals(){return EVALS.filter(isFinalEval);}
+function fixedListField(idBase,values,current,placeholder){
+  var showNew=!!(current&&values.indexOf(current)===-1);
+  var opts='<option value="">Selecione…</option>'+
+    values.map(function(v){return '<option value="'+esc(v)+'"'+(current===v?' selected':'')+'>'+esc(v)+'</option>'}).join('')+
+    '<option value="__new__"'+(showNew?' selected':'')+'>+ Adicionar novo…</option>';
+  return '<select id="'+idBase+'_sel">'+opts+'</select>'+
+    '<input id="'+idBase+'_new" placeholder="'+esc(placeholder||'Digite o novo valor')+'" style="margin-top:6px;'+(showNew?'':'display:none')+'" value="'+esc(showNew?current:'')+'">';
+}
+function wireFixedList(idBase,onInput){
+  var sel=document.getElementById(idBase+'_sel'),inp=document.getElementById(idBase+'_new');
+  if(!sel||!inp) return;
+  sel.addEventListener('change',function(){
+    if(sel.value==='__new__'){inp.style.display='';inp.focus();}
+    else{inp.style.display='none';inp.value='';}
+    if(onInput) onInput(readFixedList(idBase));
+  });
+  inp.addEventListener('input',function(){if(onInput) onInput(readFixedList(idBase));});
+}
+function readFixedList(idBase){
+  var sel=document.getElementById(idBase+'_sel'),inp=document.getElementById(idBase+'_new');
+  if(!sel) return '';
+  if(sel.value==='__new__') return (inp?inp.value:'').trim();
+  return sel.value;
+}
+
 /* ---------- PROGRAMA EXCELÊNCIA HYPER (modelo padrão de critérios) ---------- */
 var EXCELENCIA_CAT='Programa Excelência';
 var EXCELENCIA_TEMPLATE=[
@@ -387,11 +434,11 @@ function viewFuncoes(){
   var html='<div class="card"><div class="head"><h2>Nova função</h2><span class="tag">nome, área e o que ela envolve</span></div>'+
     '<div class="grid3">'+
     '<label class="f"><span>Nome da função</span><input id="rf_name" placeholder="Ex: Analista de Reconciliação"></label>'+
-    '<label class="f"><span>Área</span><input id="rf_area" list="areas" placeholder="Ex: Financeiro"></label>'+
+    '<label class="f"><span>Área</span>'+fixedListField('rf_area',allAreas(),'','Nova área, ex: Financeiro')+'</label>'+
     '<label class="f"><span>Observações</span><input id="rf_notes" placeholder="opcional"></label>'+
-    '</div><datalist id="areas"><option>Financeiro</option><option>Produto</option><option>Tecnologia</option><option>Comercial</option><option>Jurídico</option><option>Operações</option></datalist>'+
+    '</div>'+
     '<div class="row-actions" style="margin-top:12px;align-items:center">'+
-    '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="rf_critical" style="width:auto"> Área crítica (entra no Pipeline de Sucessão)</label>'+
+    '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)"><input type="checkbox" id="rf_critical" style="width:auto"> Função crítica (entra no Pipeline de Sucessão)</label>'+
     '<button class="btn primary" id="rf_add">Cadastrar função</button></div></div>';
 
   html+='<div class="card"><div class="head"><h2>Funções cadastradas</h2><div class="row-actions"><span class="tag">'+ROLES.length+' função(ões)</span>'+(ROLES.length?'<button class="btn ghost" id="rf_export" style="font-size:11.5px;padding:6px 10px">Exportar CSV</button>':'')+'</div></div>';
@@ -399,7 +446,7 @@ function viewFuncoes(){
   else{
     html+='<div class="list">'+ROLES.map(function(r){
       var n=critsForRole(r.id).length, ne=EMPLOYEES.filter(function(e){return e.roleId===r.id}).length;
-      return '<div class="item"><div class="top"><div><div class="nm">'+esc(r.name)+(r.critical?' <span class="chip crit" style="--c:var(--bad)">área crítica</span>':'')+'</div>'+
+      return '<div class="item"><div class="top"><div><div class="nm">'+esc(r.name)+(r.critical?' <span class="chip crit" style="--c:var(--bad)">função crítica</span>':'')+'</div>'+
         (r.notes?'<div class="meta">'+esc(r.notes)+'</div>':'')+'</div>'+
         '<div class="row-actions">'+(r.area?'<span class="chip">'+esc(r.area)+'</span>':'')+
         '<span class="chip">'+n+' critério(s)</span><span class="chip">'+ne+' colaborador(es)</span></div></div>'+
@@ -408,11 +455,14 @@ function viewFuncoes(){
   }
   html+='</div>';
   document.getElementById('view').innerHTML=html;
+  wireFixedList('rf_area');
   document.getElementById('rf_add').addEventListener('click',function(){
     var name=document.getElementById('rf_name').value.trim();
-    if(!name) return;
-    addDoc('roles',{name:name,area:document.getElementById('rf_area').value.trim(),notes:document.getElementById('rf_notes').value.trim(),critical:document.getElementById('rf_critical').checked,createdAt:Date.now()});
-    document.getElementById('rf_name').value='';document.getElementById('rf_area').value='';document.getElementById('rf_notes').value='';document.getElementById('rf_critical').checked=false;
+    if(!name){toast('Informe o nome da função.','warn');return;}
+    var area=readFixedList('rf_area');
+    if(!area){toast('Selecione ou informe a área.','warn');return;}
+    addDoc('roles',{name:name,area:area,notes:document.getElementById('rf_notes').value.trim(),critical:document.getElementById('rf_critical').checked,createdAt:Date.now()});
+    document.getElementById('rf_name').value='';document.getElementById('rf_notes').value='';document.getElementById('rf_critical').checked=false;
   });
   var rfExp=document.getElementById('rf_export'); if(rfExp) rfExp.addEventListener('click',exportRolesCsv);
   [].forEach.call(document.querySelectorAll('[data-tog-crit]'),function(btn){
@@ -435,14 +485,14 @@ function viewCriterios(){
   html+='<div class="grid3">'+
     '<label class="f"><span>Função</span><select id="cf_role">'+opts+'</select></label>'+
     '<label class="f"><span>Critério</span><input id="cf_name" placeholder="Ex: Entrega das metas do trimestre"></label>'+
-    '<label class="f"><span>Categoria</span><input id="cf_cat" list="cats" placeholder="Ex: Resultados"></label>'+
-    '</div><datalist id="cats"><option>Resultados</option><option>Comportamental</option><option>Técnico</option><option>Liderança</option><option>Qualidade</option><option>Processos</option></datalist>'+
+    '<label class="f"><span>Categoria</span>'+fixedListField('cf_cat',allCategories(),'','Nova categoria, ex: Resultados')+'</label>'+
+    '</div>'+
     '<div class="grid3" style="margin-top:12px">'+
     '<label class="f"><span>Tipo de avaliação</span><select id="cf_type">'+
       '<option value="scale">Nota de 1 a 5</option><option value="bool">Sim / Não</option><option value="texto">Texto livre + nota</option>'+
     '</select></label>'+
-    '<label class="f"><span>Peso (para a média ponderada)</span><input id="cf_weight" type="number" min="0" max="100" value="20"></label>'+
-    '<label class="f"><span>Como avaliar (opcional)</span><input id="cf_desc" placeholder="critério de aceite, ex: bateu 95% da meta"></label>'+
+    '<label class="f"><span>Peso (para a média ponderada)</span><input id="cf_weight" type="number" min="0" max="100" placeholder="Ex: 20" required></label>'+
+    '<label class="f"><span>Como avaliar *</span><input id="cf_desc" placeholder="critério de aceite, ex: bateu 95% da meta" required></label>'+
     '</div><div class="row-actions" style="margin-top:12px"><button class="btn primary" id="cf_add">Adicionar critério</button></div></div>';
 
   html+='<div class="card"><div class="head"><h2>Critérios por função</h2><div class="row-actions"><span class="tag">'+CRITERIA.length+' critério(s) no total</span>'+(CRITERIA.length?'<button class="btn ghost" id="cf_export" style="font-size:11.5px;padding:6px 10px">Exportar CSV</button>':'')+'</div></div>';
@@ -464,19 +514,33 @@ function viewCriterios(){
   }).join('');
   html+='</div>';
   document.getElementById('view').innerHTML=html;
+  wireFixedList('cf_cat');
   document.getElementById('cf_add').addEventListener('click',function(){
-    var name=document.getElementById('cf_name').value.trim(); if(!name) return;
+    var name=document.getElementById('cf_name').value.trim(); if(!name){toast('Informe o nome do critério.','warn');return;}
+    var category=readFixedList('cf_cat'); if(!category){toast('Selecione ou informe a categoria.','warn');return;}
+    var weightRaw=document.getElementById('cf_weight').value;
+    if(weightRaw===''){toast('Informe o peso do critério.','warn');return;}
+    var desc=document.getElementById('cf_desc').value.trim();
+    if(!desc){toast('"Como avaliar" é obrigatório.','warn');return;}
     addDoc('criteria',{roleId:document.getElementById('cf_role').value,name:name,
-      category:document.getElementById('cf_cat').value.trim()||'Geral',
+      category:category,
       type:document.getElementById('cf_type').value,
-      weight:Number(document.getElementById('cf_weight').value)||0,
-      desc:document.getElementById('cf_desc').value.trim(),createdAt:Date.now()});
-    document.getElementById('cf_name').value='';document.getElementById('cf_cat').value='';document.getElementById('cf_desc').value='';
+      weight:Number(weightRaw)||0,
+      desc:desc,createdAt:Date.now()});
+    document.getElementById('cf_name').value='';document.getElementById('cf_desc').value='';document.getElementById('cf_weight').value='';
   });
   [].forEach.call(document.querySelectorAll('[data-exc-role]'),function(btn){
     btn.addEventListener('click',function(){applyExcelenciaTemplate(btn.dataset.excRole)});
   });
   var cfExp=document.getElementById('cf_export'); if(cfExp) cfExp.addEventListener('click',exportCriteriaCsv);
+}
+
+function registrarDesligamento(id){
+  var date=document.getElementById('dl_date_'+id).value;
+  var type=document.getElementById('dl_type_'+id).value;
+  var reason=document.getElementById('dl_reason_'+id).value.trim();
+  if(!date||!type){toast('Informe a data e o tipo do desligamento.','warn');return;}
+  updateDoc('employees',{id:id,status:'inativo',terminationDate:date,terminationType:type,terminationReason:reason});
 }
 
 /* ---------- COLABORADORES ---------- */
@@ -490,16 +554,17 @@ function viewColab(){
     '<label class="f"><span>Função / cargo</span><select id="ef_role">'+opts+'</select></label>'+
     '<label class="f"><span>Situação</span><select id="ef_status"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></label>'+
     '</div><div class="grid3" style="margin-top:12px">'+
-    '<label class="f"><span>Líder direto</span><select id="ef_leader">'+leaderOpts+'</select></label>'+
-    '<label class="f"><span>Data de admissão</span><input id="ef_admission" type="date"></label>'+
+    '<label class="f"><span>Líder direto *</span><select id="ef_leader">'+leaderOpts+'</select></label>'+
+    '<label class="f"><span>Data de admissão *</span><input id="ef_admission" type="date" required></label>'+
     '<span></span>'+
-    '</div><div class="row-actions" style="margin-top:12px"><button class="btn primary" id="ef_add">Cadastrar colaborador</button></div></div>';
+    '</div><p class="meta" style="margin-top:8px">* obrigatório, exceto Líder direto quando a função cadastrada for CEO.</p>'+
+    '<div class="row-actions" style="margin-top:4px"><button class="btn primary" id="ef_add">Cadastrar colaborador</button></div></div>';
 
   html+='<div class="card"><div class="head"><h2>Colaboradores</h2><div class="row-actions"><span class="tag">'+EMPLOYEES.length+' cadastrado(s)</span>'+(EMPLOYEES.length?'<button class="btn ghost" id="ef_export" style="font-size:11.5px;padding:6px 10px">Exportar CSV</button>':'')+'</div></div>';
   if(!EMPLOYEES.length){html+='<div class="empty">Nenhum colaborador cadastrado ainda. Use o formulário acima.</div>';}
   else{
     html+='<div class="list">'+EMPLOYEES.map(function(e){
-      var n=EVALS.filter(function(v){return v.employeeId===e.id}).length;
+      var n=finalEvals().filter(function(v){return v.employeeId===e.id}).length;
       var ob=onboardingProgress(e);
       var badges='<span class="chip '+(e.status==='inativo'?'':'c')+'" style="--c:var(--green)">'+esc(e.status||'ativo')+'</span>'+
         '<span class="chip">'+n+' avaliação(ões)</span>'+
@@ -536,26 +601,55 @@ function viewColab(){
           '</div></label>'+
           '</div>'+
           '<label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)"><input type="checkbox" data-hl="'+e.id+'" style="width:auto" '+(e.highlight?'checked':'')+'> Marcar como referência/destaque do time</label>'+
+          (e.status==='inativo'?
+            '<div class="banner" style="margin-top:14px">Colaborador desligado'+(e.terminationDate?' em '+dateFmt(e.terminationDate):'')+(e.terminationType?' · '+esc(e.terminationType):'')+(e.terminationReason?' · '+esc(e.terminationReason):'')+'. Nenhum dado é apagado — use "Reativar colaborador" para retornar à situação ativa.</div>'
+            :
+            '<div class="detail" style="margin-top:14px;border-top:1px dashed var(--line);padding-top:14px">'+
+            '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">Registrar desligamento</div>'+
+            '<div class="grid3">'+
+            '<label class="f"><span>Data de desligamento *</span><input id="dl_date_'+e.id+'" type="date"></label>'+
+            '<label class="f"><span>Tipo *</span><select id="dl_type_'+e.id+'"><option value="">Selecione…</option>'+
+              '<option value="Pedido de demissão">Pedido de demissão</option>'+
+              '<option value="Demitido sem justa causa">Demitido sem justa causa</option>'+
+              '<option value="Demitido com justa causa">Demitido com justa causa</option>'+
+              '<option value="Término de contrato">Término de contrato</option>'+
+              '<option value="Outro">Outro</option>'+
+            '</select></label>'+
+            '<label class="f"><span>Motivo (opcional)</span><input id="dl_reason_'+e.id+'" placeholder="observações"></label>'+
+            '</div><div class="row-actions" style="margin-top:10px">'+confirmBtn('Confirmar desligamento',function(){registrarDesligamento(e.id)},'ghost')+'</div></div>'
+          )+
           '</div>';
       }
+      var toggleLbl=open?'Fechar':(e.status==='inativo'?'Ver dados':'Editar dados / registrar desligamento');
+      var statusBtn=e.status==='inativo'?'<button class="btn ghost" data-reativar="'+e.id+'" style="font-size:11.5px;padding:6px 10px">Reativar colaborador</button>':'';
       return '<div class="item"><div class="top"><div><div class="nm">'+esc(e.name)+'</div>'+
-        '<div class="meta">'+esc(roleName(e.roleId))+(e.admissionDate?' · admissão em '+dateFmt(e.admissionDate):'')+'</div></div>'+
+        '<div class="meta">'+esc(roleName(e.roleId))+(e.admissionDate?' · admissão em '+dateFmt(e.admissionDate):'')+(e.status==='inativo'&&e.terminationDate?' · desligado em '+dateFmt(e.terminationDate):'')+'</div></div>'+
         '<div class="row-actions">'+badges+'</div></div>'+
-        '<div class="row-actions"><button class="btn ghost" data-toggle-emp="'+e.id+'" style="font-size:11.5px;padding:6px 10px">'+(open?'Fechar':'Editar dados estratégicos')+'</button>'+confirmBtn('Excluir colaborador',function(){delDoc('employees',e.id)})+'</div>'+
+        '<div class="row-actions"><button class="btn ghost" data-toggle-emp="'+e.id+'" style="font-size:11.5px;padding:6px 10px">'+toggleLbl+'</button>'+statusBtn+'</div>'+
         edit+'</div>';
     }).join('')+'</div>';
   }
   html+='</div>';
   document.getElementById('view').innerHTML=html;
   document.getElementById('ef_add').addEventListener('click',function(){
-    var name=document.getElementById('ef_name').value.trim(); if(!name) return;
-    addDoc('employees',{name:name,roleId:document.getElementById('ef_role').value,status:document.getElementById('ef_status').value,
-      leaderId:document.getElementById('ef_leader').value||null,admissionDate:document.getElementById('ef_admission').value||null,createdAt:Date.now()});
+    var name=document.getElementById('ef_name').value.trim(); if(!name){toast('Informe o nome do colaborador.','warn');return;}
+    var roleId=document.getElementById('ef_role').value;
+    var leaderId=document.getElementById('ef_leader').value||null;
+    if(!leaderId&&!isCeoRole(roleId)){toast('Líder direto é obrigatório (exceto para a função CEO).','warn');return;}
+    var admissionDate=document.getElementById('ef_admission').value||null;
+    if(!admissionDate){toast('Informe a data de admissão.','warn');return;}
+    addDoc('employees',{name:name,roleId:roleId,status:document.getElementById('ef_status').value,
+      leaderId:leaderId,admissionDate:admissionDate,createdAt:Date.now()});
     document.getElementById('ef_name').value='';document.getElementById('ef_admission').value='';
   });
   var efExp=document.getElementById('ef_export'); if(efExp) efExp.addEventListener('click',exportEmployeesCsv);
   [].forEach.call(document.querySelectorAll('[data-toggle-emp]'),function(btn){
     btn.addEventListener('click',function(){var id=btn.dataset.toggleEmp;expandedEmp[id]=!expandedEmp[id];render();});
+  });
+  [].forEach.call(document.querySelectorAll('[data-reativar]'),function(btn){
+    btn.addEventListener('click',function(){
+      updateDoc('employees',{id:btn.dataset.reativar,status:'ativo'});
+    });
   });
   [].forEach.call(document.querySelectorAll('[data-ef]'),function(el){
     el.addEventListener('change',function(){
@@ -601,9 +695,9 @@ function viewAval(){
   var empOpts='<option value="">Selecione…</option>'+active.map(function(e){return '<option value="'+e.id+'"'+(draft.employeeId===e.id?' selected':'')+'>'+esc(e.name)+' — '+esc(roleName(e.roleId))+'</option>'}).join('');
   html+='<div class="grid3">'+
     '<label class="f"><span>Colaborador</span><select id="av_emp">'+empOpts+'</select></label>'+
-    '<label class="f"><span>Período</span><input id="av_period" list="periods" value="'+esc(draft.period)+'" placeholder="Ex: 2026-T3"></label>'+
-    '<label class="f"><span>Avaliador(a)</span><input id="av_evaluator" value="'+esc(draft.evaluator)+'" placeholder="Seu nome"></label>'+
-    '</div><datalist id="periods"><option>2026-T1</option><option>2026-T2</option><option>2026-T3</option><option>2026-T4</option></datalist>';
+    '<label class="f"><span>Período</span>'+fixedListField('av_period',allPeriods(),draft.period,'Novo período, ex: 2026-T3')+'</label>'+
+    '<label class="f"><span>Avaliador(a)</span>'+fixedListField('av_evaluator',allEvaluators(),draft.evaluator,'Nome de quem está avaliando')+'</label>'+
+    '</div>';
 
   var emp=EMPLOYEES.filter(function(e){return e.id===draft.employeeId})[0];
   if(emp){
@@ -611,9 +705,11 @@ function viewAval(){
     if(!cs.length){html+='<div class="banner" style="margin-top:14px">Essa função ainda não tem critérios cadastrados. Vá em Critérios para adicionar.</div>';}
     else{
       var prev=draftScorePreview(cs);
+      var prevExc=draftScorePreview(cs.filter(function(c){return c.category===EXCELENCIA_CAT}));
       html+='<div class="preview"><div class="num">'+(prev.score==null?'—':nf1(prev.score)+'%')+'</div>'+
         '<div class="prog"><div class="bar" style="margin-bottom:5px"><i style="width:'+(prev.total?prev.filled/prev.total*100:0).toFixed(0)+'%;background:var(--green)"></i></div>'+
-        '<span>'+prev.filled+' de '+prev.total+' critérios preenchidos'+(prev.score!=null?' · nota ponderada em tempo real':'')+'</span></div></div>';
+        '<span>Média geral ponderada (todos os critérios) · '+prev.filled+' de '+prev.total+' preenchidos'+'</span></div></div>'+
+        (prevExc.total?'<p class="meta" style="margin-top:8px">Nota do Programa Excelência (apenas critérios dessa categoria): '+(prevExc.score==null?'—':nf1(prevExc.score)+'%')+'</p>':'');
       html+='<div class="detail">'+cs.map(function(c){
         var s=draft.scores[c.id]||{};
         var col=colorFor(c.category||'Geral',CAT_COLORS);
@@ -631,25 +727,27 @@ function viewAval(){
           (c.desc?'<div class="meta">'+esc(c.desc)+'</div>':'')+body+'</div>';
       }).join('')+'</div>';
     }
-    html+='<div class="row-actions" style="margin-top:14px"><button class="btn primary" id="av_save">Salvar avaliação</button><button class="btn ghost" id="av_clear">Limpar</button></div>';
+    html+='<div class="row-actions" style="margin-top:14px"><button class="btn primary" id="av_save">Concluir avaliação</button><button class="btn ghost" id="av_draft">Salvar como rascunho</button><button class="btn ghost" id="av_clear">Limpar</button></div>';
   }
   html+='</div>';
 
-  html+='<div class="card"><div class="head"><h2>Últimas avaliações</h2><span class="tag">'+EVALS.length+' registrada(s)</span></div>';
+  var nFinal=finalEvals().length, nDraft=EVALS.length-nFinal;
+  html+='<div class="card"><div class="head"><h2>Últimas avaliações</h2><span class="tag">'+nFinal+' concluída(s)'+(nDraft?' · '+nDraft+' rascunho(s)':'')+'</span></div>';
+  html+='<p class="meta">Nota exibida abaixo: média geral ponderada (todos os critérios da função). Avaliações em rascunho não entram nas médias e indicadores do Painel Executivo.</p>';
   var recent=EVALS.slice().sort(function(a,b){return (b.createdAt||0)-(a.createdAt||0)}).slice(0,8);
   if(!recent.length){html+='<div class="empty">Nenhuma avaliação registrada ainda.</div>';}
   else{
-    html+='<div class="scroll"><table><thead><tr><th>Colaborador</th><th>Função</th><th>Período</th><th>Nota</th><th>Avaliador</th></tr></thead><tbody>'+
-      recent.map(function(ev){return '<tr><td>'+esc(empName(ev.employeeId))+'</td><td>'+esc(roleName(ev.roleId))+'</td><td>'+esc(ev.period)+'</td><td>'+scorePill(evalFinalScore(ev))+'</td><td>'+esc(ev.evaluator||'—')+'</td></tr>'}).join('')+
+    html+='<div class="scroll"><table><thead><tr><th>Colaborador</th><th>Função</th><th>Período</th><th>Nota</th><th>Avaliador</th><th>Situação</th></tr></thead><tbody>'+
+      recent.map(function(ev){return '<tr><td>'+esc(empName(ev.employeeId))+'</td><td>'+esc(roleName(ev.roleId))+'</td><td>'+esc(ev.period)+'</td><td>'+scorePill(evalFinalScore(ev))+'</td><td>'+esc(ev.evaluator||'—')+'</td><td>'+(ev.status==='rascunho'?'<span class="chip">rascunho</span>':'<span class="chip c" style="--c:var(--green)">concluída</span>')+'</td></tr>'}).join('')+
       '</tbody></table></div>';
   }
   html+='</div>';
 
   document.getElementById('view').innerHTML=html;
+  wireFixedList('av_period',function(v){draft.period=v;});
+  wireFixedList('av_evaluator',function(v){draft.evaluator=v;});
   var sel=document.getElementById('av_emp');
   sel.addEventListener('change',function(){draft.employeeId=sel.value;draft.scores={};render();});
-  document.getElementById('av_period').addEventListener('input',function(e){draft.period=e.target.value;});
-  document.getElementById('av_evaluator').addEventListener('input',function(e){draft.evaluator=e.target.value;});
   [].forEach.call(document.querySelectorAll('.scv'),function(b){
     b.addEventListener('click',function(){
       var cid=b.dataset.c; draft.scores[cid]=draft.scores[cid]||{};
@@ -665,14 +763,19 @@ function viewAval(){
   [].forEach.call(document.querySelectorAll('.txv'),function(t){
     t.addEventListener('input',function(){var cid=t.dataset.c; draft.scores[cid]=draft.scores[cid]||{}; draft.scores[cid].comment=t.value;});
   });
-  var saveBtn=document.getElementById('av_save');
+  var saveBtn=document.getElementById('av_save'), draftBtn=document.getElementById('av_draft');
+  function saveEval(status){
+    draft.period=readFixedList('av_period'); draft.evaluator=readFixedList('av_evaluator');
+    if(!draft.employeeId){toast('Selecione o colaborador.','warn');return;}
+    if(!draft.period){toast('Selecione ou informe o período.','warn');return;}
+    if(status==='concluida'&&!draft.evaluator){toast('Informe o(a) avaliador(a) para concluir.','warn');return;}
+    var emp2=EMPLOYEES.filter(function(e){return e.id===draft.employeeId})[0];
+    addDoc('evaluations',{employeeId:draft.employeeId,roleId:emp2.roleId,period:draft.period,evaluator:draft.evaluator,scores:draft.scores,status:status,createdAt:Date.now()});
+    draft={employeeId:'',period:draft.period,evaluator:draft.evaluator,scores:{}}; render();
+  }
   if(saveBtn){
-    saveBtn.addEventListener('click',function(){
-      if(!draft.employeeId||!draft.period){return;}
-      var emp2=EMPLOYEES.filter(function(e){return e.id===draft.employeeId})[0];
-      addDoc('evaluations',{employeeId:draft.employeeId,roleId:emp2.roleId,period:draft.period,evaluator:draft.evaluator,scores:draft.scores,createdAt:Date.now()});
-      draft={employeeId:'',period:draft.period,evaluator:draft.evaluator,scores:{}}; render();
-    });
+    saveBtn.addEventListener('click',function(){saveEval('concluida');});
+    if(draftBtn) draftBtn.addEventListener('click',function(){saveEval('rascunho');});
     document.getElementById('av_clear').addEventListener('click',function(){draft.scores={};render();});
   }
 }
@@ -730,11 +833,11 @@ function svgTrend(points){
 /* ---------- PAINEL EXECUTIVO ---------- */
 var filt={roleId:'',period:''};
 function viewPainel(){
-  var scored=EVALS.map(function(ev){return {ev:ev,score:evalFinalScore(ev)}});
+  var scored=finalEvals().map(function(ev){return {ev:ev,score:evalFinalScore(ev)}});
   var list=scored.filter(function(x){return (!filt.roleId||x.ev.roleId===filt.roleId)&&(!filt.period||x.ev.period===filt.period)});
   var listScored=list.filter(function(x){return x.score!=null});
   var avg=listScored.length?listScored.reduce(function(a,x){return a+x.score},0)/listScored.length:0;
-  var periods=Array.from(new Set(EVALS.map(function(e){return e.period}))).sort();
+  var periods=Array.from(new Set(finalEvals().map(function(e){return e.period}))).sort();
 
   var byEmp={};
   listScored.forEach(function(x){(byEmp[x.ev.employeeId]=byEmp[x.ev.employeeId]||[]).push(x.score)});
@@ -747,8 +850,8 @@ function viewPainel(){
   var html='<div class="kpis">'+
     '<div class="kpi"><div class="lbl">Headcount ativo</div><div class="val">'+activeEmps.length+'</div></div>'+
     '<div class="kpi"><div class="lbl">Custo de folha/mês</div><div class="val" style="font-size:20px">'+moneyFmt(payroll)+'</div></div>'+
-    '<div class="kpi"><div class="lbl">Avaliações</div><div class="val">'+list.length+'</div></div>'+
-    '<div class="kpi"><div class="lbl">Média geral</div><div class="val">'+(listScored.length?nf1(avg)+'%':'—')+'</div></div>'+
+    '<div class="kpi"><div class="lbl">Avaliações concluídas</div><div class="val">'+list.length+'</div></div>'+
+    '<div class="kpi"><div class="lbl">Média geral ponderada</div><div class="val">'+(listScored.length?nf1(avg)+'%':'—')+'</div></div>'+
     '<div class="kpi"><div class="lbl">Funções cadastradas</div><div class="val">'+ROLES.length+'</div></div>'+
     '</div>';
 
@@ -850,7 +953,7 @@ function viewPainel(){
 /* ---------- ESTRATÉGICO (visões agregadas) ---------- */
 var ESTRAT_TABS=[['9box','Matriz 9-Box'],['org','Organograma'],['clima','Clima & Cultura'],['highlights','Hyper Performance'],['succession','Pipeline de Sucessão'],['relatorios','Relatórios Gerenciais']];
 function empAvgScore(id){
-  var xs=EVALS.filter(function(v){return v.employeeId===id}).map(evalFinalScore).filter(function(v){return v!=null});
+  var xs=finalEvals().filter(function(v){return v.employeeId===id}).map(evalFinalScore).filter(function(v){return v!=null});
   return xs.length?xs.reduce(function(a,b){return a+b},0)/xs.length:null;
 }
 function perfLevel(score){return score==null?null:score>=75?2:score>=50?1:0}
@@ -889,7 +992,7 @@ function viewOrgChart(){
     if(!list||!list.length) return '';
     return '<div style="display:flex;flex-direction:column;gap:6px;'+(depth?'margin-left:22px;padding-left:12px;border-left:1px dashed var(--line);margin-top:6px':'')+'">'+
       list.map(function(e){
-        var n=EVALS.filter(function(v){return v.employeeId===e.id}).length;
+        var n=finalEvals().filter(function(v){return v.employeeId===e.id}).length;
         return '<div><div class="item" style="padding:9px 12px"><div class="top"><div><div class="nm" style="font-size:13.5px">'+esc(e.name)+'</div>'+
           '<div class="meta">'+esc(roleName(e.roleId))+(e.status==='inativo'?' · inativo':'')+'</div></div>'+
           (e.highlight?'<span class="chip c" style="--c:var(--warn)">★ destaque</span>':'')+'</div></div>'+
@@ -906,10 +1009,10 @@ function viewClima(){
   var opts='<option value="">Todos os períodos</option>'+Array.from(new Set(CLIMATE.map(function(c){return c.period}).filter(Boolean))).sort().map(function(p){return '<option value="'+esc(p)+'"'+(filt.climaPeriod===p?' selected':'')+'>'+esc(p)+'</option>'}).join('');
   var html='<div class="card"><div class="head"><h2>Nova medição de clima</h2><span class="tag">resultado da pesquisa de clima, por dimensão</span></div>'+
     '<div class="grid3">'+
-    '<label class="f"><span>Dimensão</span><input id="cl_dim" list="climadims" placeholder="Ex: Liderança"></label>'+
-    '<label class="f"><span>Score (0–100)</span><input id="cl_score" type="number" min="0" max="100" value="80"></label>'+
-    '<label class="f"><span>Período</span><input id="cl_period" placeholder="Ex: 2026-T3"></label>'+
-    '</div><datalist id="climadims"><option>Liderança</option><option>Reconhecimento</option><option>Comunicação</option><option>Ambiente de trabalho</option><option>Desenvolvimento</option><option>Confiança na gestão</option><option>Equilíbrio vida-trabalho</option></datalist>'+
+    '<label class="f"><span>Dimensão</span>'+fixedListField('cl_dim',allDimensions(),'','Nova dimensão, ex: Liderança')+'</label>'+
+    '<label class="f"><span>Score (0–100)</span><input id="cl_score" type="number" min="0" max="100" placeholder="Ex: 80" required></label>'+
+    '<label class="f"><span>Período</span>'+fixedListField('cl_period',allPeriods(),'','Novo período, ex: 2026-T3')+'</label>'+
+    '</div>'+
     '<div class="row-actions" style="margin-top:12px"><button class="btn primary" id="cl_add">Registrar medição</button></div></div>';
 
   var period=filt.climaPeriod||'';
@@ -937,7 +1040,7 @@ function viewHighlights(){
   if(!actEmp.length){html+='<div class="empty">Cadastre colaboradores ativos para registrar destaques.</div></div>';return html;}
   html+='<div class="grid3">'+
     '<label class="f"><span>Colaborador</span><select id="hl_emp">'+empOpts+'</select></label>'+
-    '<label class="f"><span>Período</span><input id="hl_period" list="periods" placeholder="Ex: 2026-T3"></label>'+
+    '<label class="f"><span>Período</span>'+fixedListField('hl_period',allPeriods(),'','Novo período, ex: 2026-T3')+'</label>'+
     '<label class="f"><span>Motivo do destaque</span><input id="hl_note" placeholder="Ex: liderou a virada do trimestre"></label>'+
     '</div><div class="row-actions" style="margin-top:12px"><button class="btn primary" id="hl_add">Registrar destaque</button></div></div>';
 
@@ -955,25 +1058,25 @@ function viewHighlights(){
 }
 function viewSuccession(){
   var critical=ROLES.filter(function(r){return r.critical});
-  var html='<div class="card"><div class="head"><h2>Novo sucessor</h2><span class="tag">vincule um candidato a uma área crítica</span></div>';
+  var html='<div class="card"><div class="head"><h2>Novo sucessor</h2><span class="tag">vincule um candidato a uma função crítica</span></div>';
   if(!critical.length){
-    html+='<div class="empty">Nenhuma área crítica marcada ainda. Vá em Funções e marque as funções críticas para sucessão.</div></div>';
+    html+='<div class="empty">Nenhuma função crítica marcada ainda. Vá em Funções e marque as funções críticas para sucessão.</div></div>';
     return html;
   }
   var roleOpts=critical.map(function(r){return '<option value="'+r.id+'">'+esc(r.name)+'</option>'}).join('');
   var empOpts=EMPLOYEES.filter(function(e){return e.status!=='inativo'}).map(function(e){return '<option value="'+e.id+'">'+esc(e.name)+'</option>'}).join('');
   html+='<div class="grid3">'+
-    '<label class="f"><span>Área crítica</span><select id="sc_role">'+roleOpts+'</select></label>'+
+    '<label class="f"><span>Função crítica</span><select id="sc_role">'+roleOpts+'</select></label>'+
     '<label class="f"><span>Candidato(a)</span><select id="sc_cand">'+empOpts+'</select></label>'+
     '<label class="f"><span>Prontidão</span><select id="sc_ready">'+Object.keys(READINESS_LABEL).map(function(k){return '<option value="'+k+'">'+READINESS_LABEL[k]+'</option>'}).join('')+'</select></label>'+
     '</div><label class="f" style="margin-top:12px"><span>Observações</span><input id="sc_notes" placeholder="opcional"></label>'+
     '<div class="row-actions" style="margin-top:12px"><button class="btn primary" id="sc_add">Adicionar candidato</button></div></div>';
 
-  html+='<div class="card"><div class="head"><h2>Pipeline de Sucessão</h2><span class="tag">cobertura de sucessor por área crítica</span></div>';
+  html+='<div class="card"><div class="head"><h2>Pipeline de Sucessão</h2><span class="tag">cobertura de sucessor por função crítica</span></div>';
   html+='<div class="list">'+critical.map(function(r){
     var holders=EMPLOYEES.filter(function(e){return e.roleId===r.id&&e.status!=='inativo'});
     var cands=SUCCESSION.filter(function(s){return s.roleId===r.id});
-    var body=!cands.length?'<div class="banner" style="margin-top:8px">Sem sucessores mapeados para esta área crítica.</div>':
+    var body=!cands.length?'<div class="banner" style="margin-top:8px">Sem sucessores mapeados para esta função crítica.</div>':
       '<div class="list" style="margin-top:8px">'+cands.map(function(s){
         var cls=s.readiness==='pronto'?'hi':s.readiness==='em_desenvolvimento'?'mid':'lo';
         return '<div class="item" style="padding:9px 12px"><div class="top"><div><div class="nm" style="font-size:13px">'+esc(empName(s.candidateId))+'</div>'+
@@ -1002,20 +1105,24 @@ function viewEstrategico(){
   });
 
   if(estratTab==='clima'){
+    wireFixedList('cl_dim'); wireFixedList('cl_period');
     var clAdd=document.getElementById('cl_add');
     if(clAdd) clAdd.addEventListener('click',function(){
-      var dim=document.getElementById('cl_dim').value.trim(); if(!dim) return;
-      addDoc('climate',{dimension:dim,score:Number(document.getElementById('cl_score').value)||0,period:document.getElementById('cl_period').value.trim()});
-      document.getElementById('cl_dim').value='';
+      var dim=readFixedList('cl_dim'); if(!dim){toast('Selecione ou informe a dimensão.','warn');return;}
+      var scoreRaw=document.getElementById('cl_score').value;
+      if(scoreRaw===''){toast('Informe o score da medição.','warn');return;}
+      var period=readFixedList('cl_period'); if(!period){toast('Selecione ou informe o período.','warn');return;}
+      addDoc('climate',{dimension:dim,score:Number(scoreRaw)||0,period:period});
     });
     var clF=document.getElementById('cl_filter');
     if(clF) clF.addEventListener('change',function(){filt.climaPeriod=clF.value;render();});
   }else if(estratTab==='highlights'){
+    wireFixedList('hl_period');
     var hlAdd=document.getElementById('hl_add');
     if(hlAdd) hlAdd.addEventListener('click',function(){
-      var period=document.getElementById('hl_period').value.trim(); if(!period) return;
+      var period=readFixedList('hl_period'); if(!period){toast('Selecione ou informe o período.','warn');return;}
       addDoc('highlights',{employeeId:document.getElementById('hl_emp').value,period:period,note:document.getElementById('hl_note').value.trim()});
-      document.getElementById('hl_period').value='';document.getElementById('hl_note').value='';
+      document.getElementById('hl_note').value='';
     });
   }else if(estratTab==='succession'){
     var scAdd=document.getElementById('sc_add');
@@ -1044,7 +1151,7 @@ function viewEstrategico(){
 function reportKpis(){
   var activeEmps=EMPLOYEES.filter(function(e){return e.status!=='inativo'});
   var payroll=activeEmps.reduce(function(s,e){return s+(Number(e.salary)||0)},0);
-  var scored=EVALS.map(evalFinalScore).filter(function(v){return v!=null});
+  var scored=finalEvals().map(evalFinalScore).filter(function(v){return v!=null});
   var avgGeral=scored.length?scored.reduce(function(a,b){return a+b},0)/scored.length:null;
   var climaAvg=CLIMATE.length?CLIMATE.reduce(function(s,c){return s+(Number(c.score)||0)},0)/CLIMATE.length:null;
   var byArea={};
@@ -1117,10 +1224,10 @@ function exportExecXlsx(){
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(critRows),'Critérios');
 
-  var avalRows=[['Colaborador','Função','Período','Nota final (%)','Avaliador']];
+  var avalRows=[['Colaborador','Função','Período','Nota final (%)','Avaliador','Situação']];
   EVALS.forEach(function(ev){
     var sc=evalFinalScore(ev);
-    avalRows.push([empName(ev.employeeId),roleName(ev.roleId),ev.period,sc!=null?Math.round(sc*10)/10:'',ev.evaluator||'']);
+    avalRows.push([empName(ev.employeeId),roleName(ev.roleId),ev.period,sc!=null?Math.round(sc*10)/10:'',ev.evaluator||'',ev.status==='rascunho'?'rascunho':'concluída']);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(avalRows),'Avaliações');
 
@@ -1173,8 +1280,8 @@ function downloadCsv(csv,filename){
   setTimeout(function(){URL.revokeObjectURL(url)},1000);
 }
 function exportCsv(list){
-  var rows=list.map(function(x){return [empName(x.ev.employeeId),roleName(x.ev.roleId),x.ev.period,x.score==null?'':nf1(x.score),x.ev.evaluator||'']});
-  downloadCsv(toCsv(['Colaborador','Função','Período','Nota final (%)','Avaliador'],rows),'avaliacoes_performance.csv');
+  var rows=list.map(function(x){return [empName(x.ev.employeeId),roleName(x.ev.roleId),x.ev.period,x.score==null?'':nf1(x.score),x.ev.evaluator||'',x.ev.status==='rascunho'?'rascunho':'concluída'];});
+  downloadCsv(toCsv(['Colaborador','Função','Período','Nota final (%)','Avaliador','Situação'],rows),'avaliacoes_performance.csv');
 }
 function exportRolesCsv(){
   var rows=ROLES.map(function(r){
@@ -1192,10 +1299,10 @@ function exportCriteriaCsv(){
 }
 function exportEmployeesCsv(){
   var rows=EMPLOYEES.map(function(e){
-    var n=EVALS.filter(function(v){return v.employeeId===e.id}).length;
-    return [e.name,roleName(e.roleId),e.status||'ativo',n];
+    var n=finalEvals().filter(function(v){return v.employeeId===e.id}).length;
+    return [e.name,roleName(e.roleId),e.status||'ativo',e.admissionDate?dateFmt(e.admissionDate):'',e.status==='inativo'&&e.terminationDate?dateFmt(e.terminationDate):'',e.status==='inativo'?(e.terminationType||''):'',n];
   });
-  downloadCsv(toCsv(['Colaborador','Função','Situação','Avaliações'],rows),'colaboradores.csv');
+  downloadCsv(toCsv(['Colaborador','Função','Situação','Admissão','Desligamento','Tipo de desligamento','Avaliações concluídas'],rows),'colaboradores.csv');
 }
 
 /* ---------- STATS (count-up) ---------- */
@@ -1214,8 +1321,8 @@ function countUp(el,to){
   requestAnimationFrame(step);
 }
 function updateHeroStats(){
-  var nRoles=ROLES.length, nEmp=EMPLOYEES.filter(function(e){return e.status!=='inativo'}).length, nEval=EVALS.length;
-  var scored=EVALS.map(evalFinalScore).filter(function(v){return v!=null});
+  var nRoles=ROLES.length, nEmp=EMPLOYEES.filter(function(e){return e.status!=='inativo'}).length, nEval=finalEvals().length;
+  var scored=finalEvals().map(evalFinalScore).filter(function(v){return v!=null});
   var avg=scored.length?scored.reduce(function(a,b){return a+b},0)/scored.length:null;
   if(nRoles!==lastHeroVals.roles){countUp(document.getElementById('hs_roles'),nRoles);lastHeroVals.roles=nRoles;}
   if(nEmp!==lastHeroVals.emp){countUp(document.getElementById('hs_emp'),nEmp);lastHeroVals.emp=nEmp;}
@@ -1237,6 +1344,14 @@ function render(){
   else if(tab==='estrategico')viewEstrategico();
   else viewPainel();
   restoreFormState(__fs);
+  syncFixedListDisplays();
+}
+function syncFixedListDisplays(){
+  var v=document.getElementById('view'); if(!v) return;
+  [].forEach.call(v.querySelectorAll('select[id$="_sel"]'),function(sel){
+    var inp=document.getElementById(sel.id.slice(0,-4)+'_new'); if(!inp) return;
+    inp.style.display=(sel.value==='__new__')?'':'none';
+  });
 }
 
 /* PROTEÇÃO GERAL CONTRA PERDA DE DADOS AO DIGITAR: qualquer render() recria
