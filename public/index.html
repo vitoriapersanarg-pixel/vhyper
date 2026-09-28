@@ -584,11 +584,11 @@ function viewColab(){
         edit='<div class="detail">'+
           '<div class="grid3">'+
           '<label class="f"><span>Líder direto</span><select data-ef="leaderId" data-id="'+e.id+'">'+leaderOpts2+'</select></label>'+
-          '<label class="f"><span>Data de admissão</span><input data-ef="admissionDate" data-id="'+e.id+'" type="date" value="'+esc(e.admissionDate||'')+'"></label>'+
+          '<label class="f"><span>Data de admissão</span><input data-ef="admissionDate" data-id="'+e.id+'" type="date" value="'+esc((e.admissionDate||'').slice(0,10))+'"></label>'+
           '<label class="f"><span>Salário mensal (R$)</span><input data-ef="salary" data-id="'+e.id+'" type="number" min="0" step="0.01" value="'+(e.salary!=null?e.salary:'')+'"></label>'+
           '</div>'+
           '<div class="grid3">'+
-          '<label class="f"><span>Aniversário</span><input data-ef="birthday" data-id="'+e.id+'" type="date" value="'+esc(e.birthday||'')+'"></label>'+
+          '<label class="f"><span>Aniversário</span><input data-ef="birthday" data-id="'+e.id+'" type="date" value="'+esc((e.birthday||'').slice(0,10))+'"></label>'+
           '<label class="f"><span>Potencial (1–5, 9-box)</span><select data-ef="potentialScore" data-id="'+e.id+'">'+[1,2,3,4,5].map(function(n){return '<option value="'+n+'"'+(Number(e.potentialScore)===n?' selected':'')+'>'+n+'</option>'}).join('')+'</select></label>'+
           '<span></span>'+
           '</div>'+
