@@ -70,7 +70,8 @@ h2{font-family:var(--disp);font-weight:600;font-size:18px;margin:0;letter-spacin
 .tag{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-@media (max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
+.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+@media (max-width:760px){.grid2,.grid3{grid-template-columns:1fr}.grid4{grid-template-columns:1fr 1fr}}
 label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
 label.f span{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
 input,select,textarea{background:var(--panel3);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:500 13.5px var(--body);width:100%;transition:border-color .2s ease,box-shadow .2s ease}
@@ -569,7 +570,9 @@ function viewColab(){
       var badges='<span class="chip '+(e.status==='inativo'?'':'c')+'" style="--c:var(--green)">'+esc(e.status||'ativo')+'</span>'+
         '<span class="chip">'+n+' avaliação(ões)</span>'+
         (e.leaderId?'<span class="chip">líder: '+esc(leaderName(e.leaderId))+'</span>':'')+
-        (e.discPrimary?'<span class="chip c" style="--c:var(--pu)">DISC '+esc(e.discPrimary)+(e.discSecondary?'/'+esc(e.discSecondary):'')+'</span>':'')+
+        (e.discD!=null?'<span class="chip c" style="--c:var(--pu)">DISC D'+e.discD+' I'+e.discI+' S'+e.discS+' C'+e.discC+'</span>':(e.discPrimary?'<span class="chip c" style="--c:var(--pu)">DISC '+esc(e.discPrimary)+(e.discSecondary?'/'+esc(e.discSecondary):'')+'</span>':''))+
+        (e.birthday?'<span class="chip">aniversário: '+dateFmt(e.birthday)+'</span>':'')+
+        (e.redFlag?'<span class="chip c" style="--c:var(--warn)">red flag</span>':'')+
         '<span class="chip c" style="--c:var(--cy)">PDI: '+esc(PDI_LABEL[e.pdiStatus]||PDI_LABEL.nao_iniciado)+'</span>'+
         '<span class="chip c" style="--c:var(--cy)">Trilha: '+esc(TRILHA_LABEL[e.trainingStatus]||TRILHA_LABEL.nao_iniciado)+'</span>'+
         '<span class="chip">onboarding '+ob+'/3</span>'+
@@ -577,8 +580,6 @@ function viewColab(){
       var open=expandedEmp[e.id];
       var edit='';
       if(open){
-        var discOpts=['','D','I','S','C'].map(function(k){return '<option value="'+k+'"'+((e.discPrimary||'')===k?' selected':'')+'>'+(k?DISC_LABEL[k]:'—')+'</option>'}).join('');
-        var discOpts2=['','D','I','S','C'].map(function(k){return '<option value="'+k+'"'+((e.discSecondary||'')===k?' selected':'')+'>'+(k?DISC_LABEL[k]:'—')+'</option>'}).join('');
         var leaderOpts2='<option value="">Sem líder direto</option>'+EMPLOYEES.filter(function(x){return x.id!==e.id}).map(function(x){return '<option value="'+x.id+'"'+(e.leaderId===x.id?' selected':'')+'>'+esc(x.name)+'</option>'}).join('');
         edit='<div class="detail">'+
           '<div class="grid3">'+
@@ -587,10 +588,17 @@ function viewColab(){
           '<label class="f"><span>Salário mensal (R$)</span><input data-ef="salary" data-id="'+e.id+'" type="number" min="0" step="0.01" value="'+(e.salary!=null?e.salary:'')+'"></label>'+
           '</div>'+
           '<div class="grid3">'+
-          '<label class="f"><span>DISC primário</span><select data-ef="discPrimary" data-id="'+e.id+'">'+discOpts+'</select></label>'+
-          '<label class="f"><span>DISC secundário</span><select data-ef="discSecondary" data-id="'+e.id+'">'+discOpts2+'</select></label>'+
+          '<label class="f"><span>Aniversário</span><input data-ef="birthday" data-id="'+e.id+'" type="date" value="'+esc(e.birthday||'')+'"></label>'+
           '<label class="f"><span>Potencial (1–5, 9-box)</span><select data-ef="potentialScore" data-id="'+e.id+'">'+[1,2,3,4,5].map(function(n){return '<option value="'+n+'"'+(Number(e.potentialScore)===n?' selected':'')+'>'+n+'</option>'}).join('')+'</select></label>'+
+          '<span></span>'+
           '</div>'+
+          '<div class="grid4">'+
+          '<label class="f"><span>DISC D</span><input data-ef="discD" data-id="'+e.id+'" type="number" min="0" max="100" value="'+(e.discD!=null?e.discD:'')+'"></label>'+
+          '<label class="f"><span>DISC I</span><input data-ef="discI" data-id="'+e.id+'" type="number" min="0" max="100" value="'+(e.discI!=null?e.discI:'')+'"></label>'+
+          '<label class="f"><span>DISC S</span><input data-ef="discS" data-id="'+e.id+'" type="number" min="0" max="100" value="'+(e.discS!=null?e.discS:'')+'"></label>'+
+          '<label class="f"><span>DISC C</span><input data-ef="discC" data-id="'+e.id+'" type="number" min="0" max="100" value="'+(e.discC!=null?e.discC:'')+'"></label>'+
+          '</div>'+
+          '<label class="f" style="display:block;margin-top:6px"><span>Red Flag / Feedback de alinhamento</span><textarea data-ef="redFlag" data-id="'+e.id+'" rows="2" style="width:100%;resize:vertical;font:inherit">'+esc(e.redFlag||'')+'</textarea></label>'+
           '<div class="grid3">'+
           '<label class="f"><span>Status do PDI</span><select data-ef="pdiStatus" data-id="'+e.id+'">'+Object.keys(PDI_LABEL).map(function(k){return '<option value="'+k+'"'+((e.pdiStatus||'nao_iniciado')===k?' selected':'')+'>'+PDI_LABEL[k]+'</option>'}).join('')+'</select></label>'+
           '<label class="f"><span>Status da trilha de capacitação</span><select data-ef="trainingStatus" data-id="'+e.id+'">'+Object.keys(TRILHA_LABEL).map(function(k){return '<option value="'+k+'"'+((e.trainingStatus||'nao_iniciado')===k?' selected':'')+'>'+TRILHA_LABEL[k]+'</option>'}).join('')+'</select></label>'+
@@ -654,7 +662,8 @@ function viewColab(){
   [].forEach.call(document.querySelectorAll('[data-ef]'),function(el){
     el.addEventListener('change',function(){
       var id=el.dataset.id,key=el.dataset.ef,val=el.value;
-      var patch={id:id}; patch[key]=(key==='salary'||key==='potentialScore')?(val===''?null:Number(val)):(val||null);
+      var numKeys={salary:1,potentialScore:1,discD:1,discI:1,discS:1,discC:1};
+      var patch={id:id}; patch[key]=numKeys[key]?(val===''?null:Number(val)):(val||null);
       updateDoc('employees',patch,true);
     });
   });
@@ -1202,10 +1211,10 @@ function exportExecXlsx(){
   Object.keys(k.byArea).sort().forEach(function(a){resumo.push([a,k.byArea[a].headcount,k.byArea[a].custo]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumo),'Resumo');
 
-  var empRows=[['Nome','Função','Área','Situação','Salário','Líder','DISC primário','DISC secundário','Potencial','PDI','Treinamento','Onboarding 30d','Onboarding 60d','Onboarding 90d','Destaque']];
+  var empRows=[['Nome','Função','Área','Situação','Salário','Líder','Aniversário','DISC D','DISC I','DISC S','DISC C','Potencial','PDI','Treinamento','Onboarding 30d','Onboarding 60d','Onboarding 90d','Destaque','Red Flag']];
   EMPLOYEES.forEach(function(e){
     var r=ROLES.filter(function(rr){return rr.id===e.roleId})[0];
-    empRows.push([e.name,r?r.name:'',r?r.area:'',e.status||'ativo',e.salary||'',empName(e.leaderId),e.discPrimary||'',e.discSecondary||'',e.potentialScore||'',e.pdiStatus||'',e.trainingStatus||'',e.onboarding30?'Sim':'Não',e.onboarding60?'Sim':'Não',e.onboarding90?'Sim':'Não',e.highlight?'Sim':'Não']);
+    empRows.push([e.name,r?r.name:'',r?r.area:'',e.status||'ativo',e.salary||'',empName(e.leaderId),e.birthday?dateFmt(e.birthday):'',e.discD!=null?e.discD:'',e.discI!=null?e.discI:'',e.discS!=null?e.discS:'',e.discC!=null?e.discC:'',e.potentialScore||'',e.pdiStatus||'',e.trainingStatus||'',e.onboarding30?'Sim':'Não',e.onboarding60?'Sim':'Não',e.onboarding90?'Sim':'Não',e.highlight?'Sim':'Não',e.redFlag||'']);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(empRows),'Colaboradores');
 
