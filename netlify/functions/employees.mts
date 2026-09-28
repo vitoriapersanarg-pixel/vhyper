@@ -8,12 +8,20 @@ export default async (req: Request) => {
     await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_date date`;
     await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_type text`;
     await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS termination_reason text`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disc_d integer`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disc_i integer`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disc_s integer`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS disc_c integer`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS birthday date`;
+    await db.sql`ALTER TABLE employees ADD COLUMN IF NOT EXISTS red_flag text`;
     if (req.method === "GET") {
       const rows = await db.sql`
         SELECT
           id, role_id AS "roleId", name, status,
           leader_id AS "leaderId", admission_date AS "admissionDate", salary,
           disc_primary AS "discPrimary", disc_secondary AS "discSecondary",
+          disc_d AS "discD", disc_i AS "discI", disc_s AS "discS", disc_c AS "discC",
+          birthday, red_flag AS "redFlag",
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
@@ -30,13 +38,17 @@ export default async (req: Request) => {
       const [row] = await db.sql`
         INSERT INTO employees (
           role_id, name, status, leader_id, admission_date, salary,
-          disc_primary, disc_secondary, potential_score, pdi_status, training_status,
+          disc_primary, disc_secondary, disc_d, disc_i, disc_s, disc_c, birthday, red_flag,
+          potential_score, pdi_status, training_status,
           onboarding_30, onboarding_60, onboarding_90, highlight
         )
         VALUES (
           ${body.roleId}, ${body.name || ""}, ${body.status || "ativo"},
           ${body.leaderId || null}, ${body.admissionDate || null}, ${body.salary ?? null},
-          ${body.discPrimary || null}, ${body.discSecondary || null}, ${body.potentialScore ?? null},
+          ${body.discPrimary || null}, ${body.discSecondary || null},
+          ${body.discD ?? null}, ${body.discI ?? null}, ${body.discS ?? null}, ${body.discC ?? null},
+          ${body.birthday || null}, ${body.redFlag || null},
+          ${body.potentialScore ?? null},
           ${body.pdiStatus || "nao_iniciado"}, ${body.trainingStatus || "nao_iniciado"},
           ${!!body.onboarding30}, ${!!body.onboarding60}, ${!!body.onboarding90}, ${!!body.highlight}
         )
@@ -44,6 +56,8 @@ export default async (req: Request) => {
           id, role_id AS "roleId", name, status,
           leader_id AS "leaderId", admission_date AS "admissionDate", salary,
           disc_primary AS "discPrimary", disc_secondary AS "discSecondary",
+          disc_d AS "discD", disc_i AS "discI", disc_s AS "discS", disc_c AS "discC",
+          birthday, red_flag AS "redFlag",
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
@@ -68,6 +82,12 @@ export default async (req: Request) => {
       const salary = has("salary") ? body.salary : current.salary;
       const discPrimary = has("discPrimary") ? body.discPrimary : current.disc_primary;
       const discSecondary = has("discSecondary") ? body.discSecondary : current.disc_secondary;
+      const discD = has("discD") ? body.discD : current.disc_d;
+      const discI = has("discI") ? body.discI : current.disc_i;
+      const discS = has("discS") ? body.discS : current.disc_s;
+      const discC = has("discC") ? body.discC : current.disc_c;
+      const birthday = has("birthday") ? body.birthday : current.birthday;
+      const redFlag = has("redFlag") ? body.redFlag : current.red_flag;
       const potentialScore = has("potentialScore") ? body.potentialScore : current.potential_score;
       const pdiStatus = has("pdiStatus") ? body.pdiStatus : current.pdi_status;
       const trainingStatus = has("trainingStatus") ? body.trainingStatus : current.training_status;
@@ -83,6 +103,8 @@ export default async (req: Request) => {
           name = ${name}, role_id = ${roleId}, status = ${status},
           leader_id = ${leaderId || null}, admission_date = ${admissionDate || null}, salary = ${salary ?? null},
           disc_primary = ${discPrimary || null}, disc_secondary = ${discSecondary || null},
+          disc_d = ${discD ?? null}, disc_i = ${discI ?? null}, disc_s = ${discS ?? null}, disc_c = ${discC ?? null},
+          birthday = ${birthday || null}, red_flag = ${redFlag || null},
           potential_score = ${potentialScore ?? null}, pdi_status = ${pdiStatus || "nao_iniciado"},
           training_status = ${trainingStatus || "nao_iniciado"},
           onboarding_30 = ${onboarding30}, onboarding_60 = ${onboarding60}, onboarding_90 = ${onboarding90},
@@ -94,6 +116,8 @@ export default async (req: Request) => {
           id, role_id AS "roleId", name, status,
           leader_id AS "leaderId", admission_date AS "admissionDate", salary,
           disc_primary AS "discPrimary", disc_secondary AS "discSecondary",
+          disc_d AS "discD", disc_i AS "discI", disc_s AS "discS", disc_c AS "discC",
+          birthday, red_flag AS "redFlag",
           potential_score AS "potentialScore", pdi_status AS "pdiStatus",
           training_status AS "trainingStatus",
           onboarding_30 AS "onboarding30", onboarding_60 AS "onboarding60", onboarding_90 AS "onboarding90",
